@@ -13,10 +13,6 @@ if ROOT not in sys.path:
 if rf"{ROOT}\enums" not in sys.path:
     sys.path.insert(1, rf"{ROOT}\enums")
 
-# Import dynamic modules with pyt_reload prefix
-import enums.domains as pyt_reload_domains
-import enums.excel_values as pyt_reload_excel_values
-
 # Inline reloader of dynamic modules
 [
     print(f"Reloaded {reload(module).__name__}")
