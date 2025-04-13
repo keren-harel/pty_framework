@@ -7,14 +7,14 @@ from importlib import reload
 ROOT = str(Path(__file__).parents[1].absolute()) # ../pyt_framework
 SHEET_NAME = "table_modification"
 
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
-if rf"{ROOT}\utils" not in sys.path:
-    sys.path.insert(1, rf"{ROOT}\utils")
-if rf"{ROOT}\enums" not in sys.path:
-    sys.path.insert(1, rf"{ROOT}\enums")
-if rf"{ROOT}\enums" not in sys.path:
-    sys.path.insert(1, rf"{ROOT}\configuration")
+def add_to_root(folders):
+    if ROOT not in sys.path:
+        sys.path.insert(0, ROOT)
+    for folder in folders:
+        if rf"{ROOT}\{folder}" not in sys.path:
+            sys.path.insert(1, rf"{ROOT}\{folder}")
+
+add_to_root(['utils', 'enums', 'configuration'])
 
 # Import dynamic modules with pyt_reload prefix
 import utils.common as pyt_reload_common
@@ -90,10 +90,14 @@ class Tool_1:
         excel_path = os.path.join(configuration_path, "fields.xlsx")
 
         arcpy.env.overwriteOutput = True
-        arcpy.CreateFeatureclass_management(gdb_path, layer_name, "Polyline", spatial_reference=SPATIAL_REFERENCE)
+        arcpy.CreateFeatureclass_management(gdb_path,
+                                            layer_name,
+                                            "Polyline",
+                                            spatial_reference=SPATIAL_REFERENCE)
 
-        ws = load_excel_data(excel_path, SHEET_NAME)
-        add_fields_from_excel_to_layer(ws, layer_name, gdb_path)
+        df = load_excel_data(excel_path, SHEET_NAME)
+        layer_df = df[df[ExcelColumns.TABLE_NAME.value] == layer_name]
+        add_fields_to_layer_from_excel(layer_df, layer_name, gdb_path)
 
         aprx = arcpy.mp.ArcGISProject("CURRENT")
         active_map = aprx.activeMap
@@ -137,7 +141,7 @@ class Tool_2:
         param1.filter.list = ["final_stands_online_template", "kkl_line_remarks_online_template",
         "survey_points"]
 
-        return [param0, param1]
+        return [param0, param1] # consider changing to dict or namedtuple
 
     def isLicensed(self):
         """Set whether the tool is licensed to execute."""
@@ -167,63 +171,28 @@ class Tool_2:
         return
 
     def execute(self, parameters, messages):
-        """The source code of the tool."""
+        """The source code of the tool.""" # TODO: change the docs!
 
         configuration_path = os.path.join(ROOT, "configuration")
-        fields_excel_path = os.path.join(configuration_path, "fields.xlsx")
+        excel_path = os.path.join(configuration_path, "fields.xlsx")
         layer_name_excel = parameters[1].valueAsText
+        layer_name = parameters[0].valueAsText
 
         aprx = arcpy.mp.ArcGISProject("CURRENT")
         gdb_path = aprx.defaultGeodatabase
+        layer_path = os.path.join(gdb_path, layer_name)
 
-        layer_name = parameters[0].valueAsText
-        input_fields = [field.name for field in arcpy.ListFields(layer_name)]
+        df = load_excel_data(excel_path, SHEET_NAME)
+        layer_df = df[df[ExcelColumns.TABLE_NAME.value] == layer_name_excel]
 
-        ws = load_excel_data(fields_excel_path, SHEET_NAME)
-        col_idx = get_column_indices(ws)
-
-        exists_excel_rows = [
-        row
-        for row in ws.iter_rows(min_row=2, values_only=True)
-        if row[col_idx[ExcelColumns.TABLE_NAME.value]] == layer_name_excel
-        and row[col_idx[ExcelColumns.EXISTS.value]]
-        ]
-
-        for row in exists_excel_rows:
-            if row[col_idx[ExcelColumns.COMMON_ERROR.value]] in input_fields:
-                arcpy.management.AlterField(os.path.join(gdb_path, layer_name),
-                row[col_idx[ExcelColumns.COMMON_ERROR.value]],
-                row[col_idx[ExcelColumns.NAME.value]],
-                 row[col_idx[ExcelColumns.ALIAS.value]])
-
-
-        input_fields = [field.name for field in arcpy.ListFields(layer_name)]
-        exists_excel_fields = [
-        row[col_idx[ExcelColumns.NAME.value]]
-        for row in ws.iter_rows(min_row=2, values_only=True)
-        if row[col_idx[ExcelColumns.TABLE_NAME.value]] == layer_name_excel
-        and row[col_idx[ExcelColumns.EXISTS.value]]
-        ]
-        missing_fields = [field for field in exists_excel_fields if field not in input_fields]
-
-        if missing_fields:
-            arcpy.AddError(f"The following fields are missing in the input layer: {', '.join(missing_fields)}")
+        verify_required_fields(layer_path, layer_df)
+        if not verify_required_fields:
             return
 
-        excel_fields = [
-        row[col_idx[ExcelColumns.NAME.value]] for row in ws.iter_rows(min_row=2, values_only=True)
-        if row[col_idx[ExcelColumns.TABLE_NAME.value]] == layer_name_excel
-    ]
+        remove_extra_fields_from_layer(layer_df, layer_path)
 
-        layer_fields = [field.name for field in arcpy.ListFields(os.path.join(gdb_path, layer_name)) if not field.required]
-        fields_to_delete = [field for field in layer_fields if field not in excel_fields]
-        if fields_to_delete:
-            arcpy.DeleteField_management(os.path.join(gdb_path, layer_name), fields_to_delete)
-
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            if row[col_idx[ExcelColumns.TABLE_NAME.value]] == layer_name_excel and row[col_idx[ExcelColumns.TO_ADD.value]]:
-                field_params = get_row_values(row, col_idx)
-                create_field(gdb_path, layer_name, **field_params)
+        to_add_df = layer_df[layer_df[ExcelColumns.TO_ADD.value].notna()]
+        add_fields_to_layer_from_excel(to_add_df, layer_name, gdb_path)
 
         active_map = aprx.activeMap
         active_map.addDataFromPath(os.path.join(gdb_path, layer_name))

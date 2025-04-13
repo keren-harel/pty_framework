@@ -1,21 +1,21 @@
 from enum import Enum
 
 class Suggestion(Enum):
-    union = "איחוד"
-    split = "פיצול"
+    UNION = "איחוד"
+    SPLIT = "פיצול"
 
 class Decision(Enum):
-    yes = "כן"
-    no = "לא"
-    surveyor_decision = "?"
+    YES = "כן"
+    NO = "לא"
+    SURVEYOR_DECISION = "?"
 
 class surveyDecision(Enum):
-    approved = "לקבל"
-    reject = "לא לקבל"
+    APPROVE = "לקבל"
+    REJECT = "לא לקבל"
 
 class Notes(Enum):
-    field_suggestion = "הצעה מהשטח"
-    new_suggestion = "הצעה חדשה"
-    pre_maping_suggestion_approved = "הצעה מקדם מיפוי – התקבלה"
-    pre_maping_suggestion_rejected = "הצעה מקדם מיפוי – נדחתה"
-    second_discussion_suggestion = "הצעה מהכנה לדיון שני"
+    FIELD_SUGGESTION = "הצעה מהשטח"
+    NEW_SUGGESTION = "הצעה חדשה"
+    PRE_MAPPING_SUGGESTION_APPROVED = "הצעה מקדם מיפוי – התקבלה"
+    PRE_MAPPING_SUGGESTION_REJECTED = "הצעה מקדם מיפוי – נדחתה"
+    SECOND_DISCUSSION_SUGGESTION = "הצעה מהכנה לדיון שני"
