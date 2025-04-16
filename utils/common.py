@@ -96,7 +96,7 @@ def verify_required_fields(layer_path, layer_df):
 
     # Handle common errors and rename fields
     for _, row in common_error_df.iterrows():
-        if row[ExcelColumns.COMMON_ERROR.value] in layer_fields:
+        if row[ExcelColumns.COMMON_ERROR.value] in layer_fields and row[ExcelColumns.NAME.value] not in layer_fields:
             arcpy.management.AlterField(
                 in_table=layer_path,
                 field=row[ExcelColumns.COMMON_ERROR.value],
@@ -120,7 +120,6 @@ def remove_extra_fields_from_layer(layer_df, layer_path):
 
     layer_fields = [field.name for field in arcpy.ListFields(layer_path) if not field.required]
     fields_to_delete = [field for field in layer_fields if field not in layer_df[ExcelColumns.NAME.value].values]
-    arcpy.AddMessage(fields_to_delete)
 
     if fields_to_delete:
         arcpy.DeleteField_management(layer_path, fields_to_delete)

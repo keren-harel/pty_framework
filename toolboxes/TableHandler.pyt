@@ -117,19 +117,6 @@ class Tool_2:
     def getParameterInfo(self):
         """Define parameter definitions"""
 
-        aprx = arcpy.mp.ArcGISProject("CURRENT")
-        default_gdb = aprx.defaultGeodatabase
-
-        param0 = arcpy.Parameter(
-            displayName="Select Feature Class",
-            name="in_fc",
-            datatype="GPString",
-            parameterType="Required",
-            direction="Input"
-        )
-        param0.filter.type = "ValueList"
-        param0.filter.list = []
-
         param1 = arcpy.Parameter(
         displayName="Layer Name",
         name="layer_name",
@@ -141,7 +128,17 @@ class Tool_2:
         param1.filter.list = ["final_stands_online_template", "kkl_line_remarks_online_template",
         "survey_points"]
 
-        return [param0, param1] # consider changing to dict or namedtuple
+        param0 = arcpy.Parameter(
+            displayName="Select Layer from Map",
+            name="in_layer",
+            datatype="GPString",
+            parameterType="Required",
+            direction="Input"
+        )
+        param0.filter.type = "ValueList"
+        param0.filter.list = []
+
+        return [param1, param0] # consider changing to dict or namedtuple
 
     def isLicensed(self):
         """Set whether the tool is licensed to execute."""
@@ -152,16 +149,31 @@ class Tool_2:
         validation is performed.  This method is called whenever a parameter
         has been changed."""
 
-        aprx = arcpy.mp.ArcGISProject("CURRENT")
-        default_gdb = aprx.defaultGeodatabase
+        if parameters[0].valueAsText == "final_stands_online_template" or parameters[0].valueAsText == "kkl_line_remarks_online_template":
 
-        if default_gdb:
-            arcpy.env.workspace = default_gdb
-            feature_classes = arcpy.ListFeatureClasses()
+            aprx = arcpy.mp.ArcGISProject("CURRENT")
+            map_obj = aprx.activeMap
 
-            if feature_classes:
-                parameters[0].filter.list = feature_classes
+            if map_obj:
+                full_paths = [
+                layer.dataSource
+                for layer in map_obj.listLayers()
+                if layer.isFeatureLayer and hasattr(layer, "dataSource")
+            ]
 
+                parameters[1].filter.list = full_paths
+
+        if parameters[0].valueAsText == "survey_points":
+            aprx = arcpy.mp.ArcGISProject("CURRENT")
+            default_gdb = aprx.defaultGeodatabase
+
+            if default_gdb:
+                arcpy.env.workspace = default_gdb
+                feature_classes = arcpy.ListFeatureClasses()
+
+                if feature_classes:
+                    full_paths = [f"{default_gdb}\\{fc}" for fc in feature_classes]
+                    parameters[1].filter.list = full_paths
 
         return
 
@@ -175,27 +187,24 @@ class Tool_2:
 
         configuration_path = os.path.join(ROOT, "configuration")
         excel_path = os.path.join(configuration_path, "fields.xlsx")
-        layer_name_excel = parameters[1].valueAsText
-        layer_name = parameters[0].valueAsText
-
-        aprx = arcpy.mp.ArcGISProject("CURRENT")
-        gdb_path = aprx.defaultGeodatabase
-        layer_path = os.path.join(gdb_path, layer_name)
+        layer_name_excel = parameters[0].valueAsText
+        layer_path = parameters[1].valueAsText
+        gdb_path = os.path.dirname(layer_path)
+        layer_name = os.path.basename(layer_path)
 
         df = load_excel_data(excel_path, SHEET_NAME)
         layer_df = df[df[ExcelColumns.TABLE_NAME.value] == layer_name_excel]
 
-        verify_required_fields(layer_path, layer_df)
-        if not verify_required_fields:
+        is_verified = verify_required_fields(layer_path, layer_df)
+        arcpy.AddMessage(is_verified)
+        if not is_verified:
+            arcpy.AddMessage("enter")
             return
 
         remove_extra_fields_from_layer(layer_df, layer_path)
 
         to_add_df = layer_df[layer_df[ExcelColumns.TO_ADD.value].notna()]
         add_fields_to_layer_from_excel(to_add_df, layer_name, gdb_path)
-
-        active_map = aprx.activeMap
-        active_map.addDataFromPath(os.path.join(gdb_path, layer_name))
 
         return
 
